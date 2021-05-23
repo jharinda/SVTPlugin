@@ -23,6 +23,8 @@ SvtPluginAudioProcessor::SvtPluginAudioProcessor()
 #endif
 {
     juce::NormalisableRange<float> filterCutoffParam(minFilterCutoffValue, maxFilterCutoffValue);
+
+    filterCutoffParam.setSkewForCentre(1000);
     juce::NormalisableRange<float> filterResonanceParam(minFilterResonanceValue, maxFilterResonanceValue);
     juce::NormalisableRange<float> filterTypeParam(minFilterTypeValue, maxFilterTypeValue);
 
@@ -103,8 +105,44 @@ void SvtPluginAudioProcessor::changeProgramName (int index, const juce::String& 
 //==============================================================================
 void SvtPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
+    lastSampleRate = sampleRate;
+
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = lastSampleRate;
+    spec.maximumBlockSize = samplesPerBlock;
+    spec.numChannels = getNumOutputChannels();
+    
+    stateVariableFilter.reset();
+    updateFilter();
+    stateVariableFilter.prepare(spec);
+
+    
+}
+
+void SvtPluginAudioProcessor::updateFilter()
+{
+    int filterChoice = *treeState.getRawParameterValue(filterTypeId);
+    float cutoff = *treeState.getRawParameterValue(filterCutoffId);
+    float resonance = *treeState.getRawParameterValue(filterResonanceId);
+
+    if (filterChoice == 0)
+    {
+        stateVariableFilter.state->type = juce::dsp::StateVariableFilter::Parameters<float>::Type::lowPass;
+        stateVariableFilter.state->setCutOffFrequency(lastSampleRate, cutoff, resonance);
+    }
+
+    if (filterChoice == 1)
+    {
+        stateVariableFilter.state->type = juce::dsp::StateVariableFilter::Parameters<float>::Type::bandPass;
+        stateVariableFilter.state->setCutOffFrequency(lastSampleRate, cutoff, resonance);
+    }
+
+    if (filterChoice == 2)
+    {
+        stateVariableFilter.state->type = juce::dsp::StateVariableFilter::Parameters<float>::Type::highPass;
+        stateVariableFilter.state->setCutOffFrequency(lastSampleRate, cutoff, resonance);
+    }
+
 }
 
 void SvtPluginAudioProcessor::releaseResources()
@@ -143,27 +181,15 @@ void SvtPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
+   
+    updateFilter();
+    juce::dsp::AudioBlock<float> block(buffer);
+    stateVariableFilter.process(juce::dsp::ProcessContextReplacing<float> (block));
 
-        // ..do something to the data...
-    }
+
 }
 
 //==============================================================================

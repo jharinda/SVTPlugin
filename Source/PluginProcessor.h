@@ -52,12 +52,13 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+    void updateFilter();
 
     float minFilterCutoffValue = 20.0f;
     float maxFilterCutoffValue = 20000.0f;
     float defaultFilterCutoffValue = 600.0f;
 
-    float minFilterResonanceValue = 0.0f;
+    float minFilterResonanceValue = 0.1f;
     float maxFilterResonanceValue = 10.0f;
     float defaultFilterResonanceValue = 2.0f;
 
@@ -81,6 +82,11 @@ public:
 
 
 private:
+
+    juce::dsp::ProcessorDuplicator<juce::dsp::StateVariableFilter::Filter<float>, 
+        juce::dsp::StateVariableFilter::Parameters<float>> stateVariableFilter;
+
+    float lastSampleRate;
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SvtPluginAudioProcessor)
 };
